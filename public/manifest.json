@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "short_name": "Швейний Облік",
+  "name": "Швейний Облік — Benito Eugenio",
+  "description": "Система обліку швейного виробництва, обладнання та матеріалів Benito Eugenio",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "display": "standalone",
+  "orientation": "any",
+  "categories": ["business", "utilities", "productivity"]
+}

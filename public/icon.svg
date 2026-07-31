@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="110" fill="#0a0a0a"/>
+  <rect x="20" y="20" width="472" height="472" rx="90" fill="none" stroke="#ff6b00" stroke-width="8" stroke-dasharray="16 12" opacity="0.6"/>
+  <!-- Base -->
+  <path d="M 80 380 L 432 380 Q 450 380 450 365 Q 450 350 432 350 L 80 350 Q 62 350 62 365 Q 62 380 80 380 Z" fill="#ff6b00"/>
+  <!-- Body Right Column -->
+  <path d="M 340 350 L 340 180 Q 340 140 300 140 L 160 140 Q 140 140 140 160 L 140 210 Q 140 220 150 220 L 270 220 Q 290 220 290 240 L 290 350 Z" fill="#ffffff"/>
+  <!-- Needle Assembly -->
+  <rect x="160" y="220" width="12" height="70" fill="#ff6b00" rx="3"/>
+  <polygon points="166,310 160,290 172,290" fill="#ffffff"/>
+  <circle cx="166" cy="330" r="4" fill="#ff6b00"/>
+  <!-- Thread spool -->
+  <rect x="310" y="100" width="30" height="40" fill="#ff6b00" rx="4"/>
+  <line x1="325" y1="90" x2="325" y2="100" stroke="#ffffff" stroke-width="4"/>
+  <line x1="325" y1="110" x2="166" y2="220" stroke="#ff6b00" stroke-width="3" stroke-dasharray="6 4" opacity="0.8"/>
+  <!-- Wheel -->
+  <ellipse cx="380" cy="220" rx="20" ry="45" fill="#ff6b00"/>
+  <ellipse cx="380" cy="220" rx="10" ry="25" fill="#0a0a0a"/>
+  <!-- Text Tag -->
+  <text x="256" y="440" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="34" letter-spacing="2">BENITO EUGENIO</text>
+  <text x="256" y="475" text-anchor="middle" fill="#ff6b00" font-family="sans-serif" font-weight="700" font-size="22" letter-spacing="4">ШВЕЙНИЙ ОБЛІК</text>
+</svg>

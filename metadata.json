@@ -1,0 +1,10 @@
+{
+  "name": "Production Control by Benito Eugenio",
+  "description": "PWA для обліку швейного виробництва, обладнання, складу та заробітної плати",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
