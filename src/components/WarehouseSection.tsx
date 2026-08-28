@@ -115,6 +115,7 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustNote, setAdjustNote] = useState('');
   const [adjustDate, setAdjustDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [reasonForDeduction, setReasonForDeduction] = useState<string>('Знос / Випрацювання ресурсу');
 
   // Issuance Target state (for equipment or division binding)
   const [issueTargetType, setIssueTargetType] = useState<'equipment' | 'division' | 'general'>('equipment');
@@ -148,26 +149,37 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
   const [inventoryCounts, setInventoryCounts] = useState<{ [itemId: string]: number }>({});
   const [inventoryNotes, setInventoryNotes] = useState<{ [itemId: string]: string }>({});
 
-  // Filtered Warehouse Items
-  const filteredItems = warehouse.filter((item) => {
-    const term = searchTerm.toLowerCase().trim();
-    const matchesSearch =
-      !term ||
-      item.name.toLowerCase().includes(term) ||
-      (item.brand && item.brand.toLowerCase().includes(term)) ||
-      (item.specs && item.specs.toLowerCase().includes(term)) ||
-      (item.purpose && item.purpose.toLowerCase().includes(term)) ||
-      (item.supplier && item.supplier.toLowerCase().includes(term)) ||
-      (item.classification && item.classification.toLowerCase().includes(term));
+  // Filtered Warehouse Items (Strictly sorted by Category A-Z, then Name A-Z, then Specs)
+  const filteredItems = React.useMemo(() => {
+    return warehouse
+      .filter((item) => {
+        const term = searchTerm.toLowerCase().trim();
+        const matchesSearch =
+          !term ||
+          item.name.toLowerCase().includes(term) ||
+          (item.brand && item.brand.toLowerCase().includes(term)) ||
+          (item.specs && item.specs.toLowerCase().includes(term)) ||
+          (item.purpose && item.purpose.toLowerCase().includes(term)) ||
+          (item.supplier && item.supplier.toLowerCase().includes(term)) ||
+          (item.assignedEquipmentName && item.assignedEquipmentName.toLowerCase().includes(term)) ||
+          (item.classification && item.classification.toLowerCase().includes(term));
 
-    const matchesName = nameFilter === 'all' || item.name === nameFilter;
-    const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
-    const matchesBrand = brandFilter === 'all' || (item.brand && item.brand.toLowerCase() === brandFilter.toLowerCase());
-    const matchesSpecs = specsFilter === 'all' || (item.specs && item.specs.toLowerCase() === specsFilter.toLowerCase());
-    const matchesSupplier = supplierFilter === 'all' || (item.supplier && item.supplier.toLowerCase() === supplierFilter.toLowerCase());
+        const matchesName = nameFilter === 'all' || item.name === nameFilter;
+        const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+        const matchesBrand = brandFilter === 'all' || (item.brand && item.brand.toLowerCase() === brandFilter.toLowerCase());
+        const matchesSpecs = specsFilter === 'all' || (item.specs && item.specs.toLowerCase() === specsFilter.toLowerCase());
+        const matchesSupplier = supplierFilter === 'all' || (item.supplier && item.supplier.toLowerCase() === supplierFilter.toLowerCase());
 
-    return matchesSearch && matchesName && matchesCategory && matchesBrand && matchesSpecs && matchesSupplier;
-  });
+        return matchesSearch && matchesName && matchesCategory && matchesBrand && matchesSpecs && matchesSupplier;
+      })
+      .sort((a, b) => {
+        const catComp = a.category.localeCompare(b.category, 'uk');
+        if (catComp !== 0) return catComp;
+        const nameComp = a.name.localeCompare(b.name, 'uk');
+        if (nameComp !== 0) return nameComp;
+        return (a.specs || '').localeCompare(b.specs || '', 'uk');
+      });
+  }, [warehouse, searchTerm, nameFilter, categoryFilter, brandFilter, specsFilter, supplierFilter]);
 
   // Collect all stock movements for the Journal view
   const allMovementsList = React.useMemo(() => {
@@ -180,6 +192,7 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
       type: string;
       quantity: number;
       note: string;
+      reasonForDeduction?: string;
       equipmentId?: string;
       equipmentName?: string;
       division?: string;
@@ -197,6 +210,7 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
           type: mov.type,
           quantity: mov.quantity,
           note: mov.note || '',
+          reasonForDeduction: mov.reasonForDeduction,
           equipmentId: mov.equipmentId,
           equipmentName: mov.equipmentName,
           division: mov.division,
@@ -347,6 +361,8 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
       supplier: editingItem.supplier || '',
       purchasePrice: Number(editingItem.purchasePrice) || 0,
       arrivalDate: arrivalDateVal,
+      assignedEquipmentId: editingItem.assignedEquipmentId || undefined,
+      assignedEquipmentName: editingItem.assignedEquipmentName || undefined,
       movements: initialMovements,
     };
 
@@ -362,18 +378,23 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
     setAdjustType(type);
     setAdjustQty(1);
     setAdjustNote('');
+    setReasonForDeduction('Знос / Випрацювання ресурсу');
     setAdjustDate(new Date().toISOString().split('T')[0]);
 
     if (type === 'expense') {
-      if (item.category === 'Голки' || item.category === 'Запчастини' || item.category === 'Витратники') {
+      if (item.assignedEquipmentId && equipment.some((e) => e.id === item.assignedEquipmentId)) {
         setIssueTargetType('equipment');
+        setSelectedEquipmentId(item.assignedEquipmentId);
+        const eq = equipment.find((e) => e.id === item.assignedEquipmentId);
+        if (eq) setSelectedDivision(eq.division || 'Цех №1 (Трикотаж)');
+      } else if (item.category === 'Голки' || item.category === 'Запчастини' || item.category === 'Витратники') {
+        setIssueTargetType('equipment');
+        if (equipment && equipment.length > 0) {
+          setSelectedEquipmentId(equipment[0].id);
+          setSelectedDivision(equipment[0].division || 'Цех №1 (Трикотаж)');
+        }
       } else {
         setIssueTargetType('division');
-      }
-      if (equipment && equipment.length > 0) {
-        setSelectedEquipmentId(equipment[0].id);
-        setSelectedDivision(equipment[0].division || 'Цех №1 (Трикотаж)');
-      } else {
         setSelectedDivision('Цех №1 (Трикотаж)');
       }
     }
@@ -435,6 +456,7 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
       type: adjustType,
       quantity: change,
       note: noteText,
+      reasonForDeduction: adjustType === 'expense' ? reasonForDeduction : undefined,
       division: targetDivision,
       equipmentId: targetEquipmentId,
       equipmentName: targetEquipmentName,
@@ -804,8 +826,13 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
                         </td>
                         <td className="py-3 px-3">
                           <div className="font-medium text-white">{mov.note}</div>
-                          {(mov.equipmentName || mov.division) && (
+                          {(mov.equipmentName || mov.division || mov.reasonForDeduction) && (
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              {mov.reasonForDeduction && (
+                                <span className="px-2 py-0.5 rounded bg-[#ff3b3b]/20 border border-[#ff3b3b]/30 text-[#ff3b3b] text-[10px] font-bold">
+                                  📋 {mov.reasonForDeduction}
+                                </span>
+                              )}
                               {mov.equipmentName && (
                                 <span className="px-2 py-0.5 rounded bg-[#ff6b00]/20 border border-[#ff6b00]/30 text-[#ff6b00] text-[10px] font-bold">
                                   ⚙️ {mov.equipmentName}
@@ -1003,10 +1030,25 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
                       {item.purpose || item.category}
                     </div>
                   )}
+
+                  {/* Статус закріплення за конкретною технікою */}
+                  {item.assignedEquipmentName && (
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (item.assignedEquipmentName) setSearchTerm(item.assignedEquipmentName);
+                      }}
+                      title="Закріплено за цією одиницею техніки"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#ff6b00]/15 border border-[#ff6b00]/35 text-[#ff6b00] text-[11px] font-semibold w-full hover:bg-[#ff6b00]/25 transition-colors cursor-pointer"
+                    >
+                      <span className="shrink-0">⚙️ Закріплено:</span>
+                      <span className="truncate font-bold text-white">{item.assignedEquipmentName}</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Снизу под ним — количество */}
-                <div className="mt-3 pt-2.5 border-t border-white/10 flex flex-col gap-1 text-xs">
+                {/* Снизу под ним — количество та кнопочки списання / приходу */}
+                <div className="mt-3 pt-2.5 border-t border-white/10 flex flex-col gap-2 text-xs">
                   {item.unit === 'уп' && item.itemsPerPack && item.itemsPerPack > 0 ? (
                     <>
                       <div className="flex items-center justify-between text-[#aaaaaa]">
@@ -1030,6 +1072,30 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
                       </span>
                     </div>
                   )}
+
+                  {/* Швидкі дії: Прихід / Списати */}
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openAdjustmentModal(item, 'receipt');
+                      }}
+                      className="py-1 px-2 rounded-lg bg-[#2ecc71]/15 hover:bg-[#2ecc71]/30 border border-[#2ecc71]/30 text-[#2ecc71] text-[11px] font-bold flex items-center justify-center gap-1 transition-all active:scale-95"
+                    >
+                      <TrendingUp className="w-3 h-3" /> Прихід
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openAdjustmentModal(item, 'expense');
+                      }}
+                      className="py-1 px-2 rounded-lg bg-[#ff3b3b]/15 hover:bg-[#ff3b3b]/30 border border-[#ff3b3b]/30 text-[#ff3b3b] text-[11px] font-bold flex items-center justify-center gap-1 transition-all active:scale-95"
+                    >
+                      <TrendingDown className="w-3 h-3" /> Списати
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -1307,6 +1373,42 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
                   className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl font-mono text-white"
                 />
               </div>
+
+              {/* 10. Закріплення за конкретною технікою */}
+              <div>
+                <label className="block text-[#aaaaaa] mb-1 font-medium text-xs flex items-center gap-1.5">
+                  ⚙️ 10. Закріпити за конкретною технікою (опціонально)
+                </label>
+                <select
+                  value={editingItem.assignedEquipmentId || ''}
+                  onChange={(e) => {
+                    const eqId = e.target.value;
+                    if (!eqId) {
+                      setEditingItem({ ...editingItem, assignedEquipmentId: undefined, assignedEquipmentName: undefined });
+                    } else {
+                      const eq = equipment.find((item) => item.id === eqId);
+                      setEditingItem({
+                        ...editingItem,
+                        assignedEquipmentId: eqId,
+                        assignedEquipmentName: eq ? `${eq.nomenclatureName} [${eq.nomenclatureNumber}]` : undefined,
+                      });
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs focus:outline-none focus:border-[#ff6b00]"
+                >
+                  <option value="" className="bg-[#111]">
+                    — Не закріплено (Загальний склад) —
+                  </option>
+                  {equipment && equipment.map((eq) => (
+                    <option key={eq.id} value={eq.id} className="bg-[#111]">
+                      {eq.nomenclatureName} ({eq.classification || eq.subcategory}) — [{eq.nomenclatureNumber}] | {eq.division}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-[#aaaaaa] mt-1">
+                  В картці позиції відображатиметься статус, що дана позиція закріплена за конкретною технікою.
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-between items-center mt-6">
@@ -1465,6 +1567,37 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
                       </select>
                     </div>
                   )}
+
+                  {/* Причина списання для бухгалтерії */}
+                  <div className="mt-2.5">
+                    <label className="block text-[#ff6b00] mb-1 font-bold text-[11px]">
+                      📋 Причина списання (для бухгалтерського обліку) *
+                    </label>
+                    <select
+                      value={reasonForDeduction}
+                      onChange={(e) => setReasonForDeduction(e.target.value)}
+                      className="w-full px-3 py-2 bg-black/60 border border-white/15 rounded-xl text-white text-xs font-medium focus:outline-none focus:border-[#ff6b00]"
+                    >
+                      <option value="Знос / Випрацювання ресурсу" className="bg-[#111]">
+                        Знос / Випрацювання робочого ресурсу
+                      </option>
+                      <option value="Поломка / Деформація під час роботи" className="bg-[#111]">
+                        Поломка / Деформація під час виконання робіт
+                      </option>
+                      <option value="Планова заміна при регламентному ТО" className="bg-[#111]">
+                        Планова заміна при регламентному ТО
+                      </option>
+                      <option value="Заводський брак / Пошкодження у партії" className="bg-[#111]">
+                        Заводський брак / Пошкодження у партії
+                      </option>
+                      <option value="Видача на виробничий цех" className="bg-[#111]">
+                        Видача на виробничий цех / розкрій
+                      </option>
+                      <option value="Інша причина (вказати у коментарі)" className="bg-[#111]">
+                        Інша причина (деталізувати у коментарі)
+                      </option>
+                    </select>
+                  </div>
                 </div>
               )}
 
@@ -1673,6 +1806,14 @@ export const WarehouseSection: React.FC<WarehouseSectionProps> = ({
                 <div>
                   <span className="text-[#aaaaaa] block">Ціна видаткової накладної:</span>
                   <strong className="text-white font-mono">{selectedWarehouseItem.purchasePrice} грн</strong>
+                </div>
+              ) : null}
+              {selectedWarehouseItem.assignedEquipmentName ? (
+                <div className="col-span-2 p-2 rounded-xl bg-[#ff6b00]/15 border border-[#ff6b00]/30 text-[#ff6b00]">
+                  <span className="text-[#aaaaaa] text-[10px] block font-semibold">Закріплене обладнання:</span>
+                  <strong className="text-white text-xs flex items-center gap-1 mt-0.5">
+                    ⚙️ {selectedWarehouseItem.assignedEquipmentName}
+                  </strong>
                 </div>
               ) : null}
             </div>

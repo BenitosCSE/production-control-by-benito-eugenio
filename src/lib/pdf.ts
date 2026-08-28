@@ -308,12 +308,13 @@ export async function downloadTimesheetPDF(
 
   let totalHoursWeekday = 0;
   let totalHoursWeekend = 0;
+  let totalAutoCompensation = 0;
+  let totalAutoKm = 0;
 
   logs.sort((a, b) => a.date.localeCompare(b.date));
 
   const rowsHtml = logs.map((log, idx) => {
     const d = new Date(log.date);
-    const dayNum = d.getDate();
     const dayOfWeekStr = d.toLocaleDateString('uk-UA', { weekday: 'short' });
     const isWk = log.isWeekend || d.getDay() === 0 || d.getDay() === 6;
 
@@ -325,6 +326,17 @@ export async function downloadTimesheetPDF(
 
     const rateMult = isWk ? 1.5 : 1.0;
     const earned = log.hours * hourlyRate * rateMult;
+    const autoComp = log.autoTrip?.totalCompensation || 0;
+    if (autoComp > 0) {
+      totalAutoCompensation += autoComp;
+      totalAutoKm += log.autoTrip?.distanceKm || 0;
+    }
+
+    let notesDisplay = log.note || '—';
+    if (log.autoTrip && log.autoTrip.totalCompensation > 0) {
+      const autoNote = log.autoTrip.note ? ` (${log.autoTrip.note})` : '';
+      notesDisplay += `<br/><span style="color: #b06000; font-weight: bold; font-size: 10px;">🚗 Авто: ${log.autoTrip.distanceKm} км / ${log.autoTrip.durationMinutes} хв — компенсація: +${log.autoTrip.totalCompensation.toFixed(2)} грн${autoNote}</span>`;
+    }
 
     return `
       <tr style="${isWk ? 'background: #fff8f0;' : ''}">
@@ -333,19 +345,23 @@ export async function downloadTimesheetPDF(
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-weight: bold;">${log.hours} год</td>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${isWk ? 'Вихідний (×1.5)' : 'Звичайний (×1.0)'}</td>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">${earned.toFixed(2)} грн</td>
-        <td style="padding: 6px; border: 1px solid #ccc; font-size: 11px;">${log.note || '—'}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: right; color: ${autoComp > 0 ? '#b06000' : '#888'}; font-weight: ${autoComp > 0 ? 'bold' : 'normal'};">
+          ${autoComp > 0 ? `+${autoComp.toFixed(2)} грн` : '0.00 грн'}
+        </td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 11px;">${notesDisplay}</td>
       </tr>
     `;
   }).join('');
 
   const totalWeekdayEarned = totalHoursWeekday * hourlyRate;
   const totalWeekendEarned = totalHoursWeekend * hourlyRate * 1.5;
-  const totalSalary = totalWeekdayEarned + totalWeekendEarned;
+  const totalSalaryEarned = totalWeekdayEarned + totalWeekendEarned;
+  const grandTotalPayout = totalSalaryEarned + totalAutoCompensation;
 
   container.innerHTML = `
     <div style="font-family: Arial, sans-serif; font-size: 12px; color: #111; line-height: 1.4;">
       <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 16px;">
-        <h2 style="margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase;">ПОДАННЯ ПРО ВІДПРАЦЬОВАНІ ГОДИНИ</h2>
+        <h2 style="margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase;">ПОДАННЯ ПРО ВІДПРАЦЬОВАНІ ГОДИНИ ТА АМОРТИЗАЦІЮ АВТО</h2>
         <p style="margin: 4px 0 0 0; font-size: 14px; font-weight: bold; color: #ff6b00; text-transform: capitalize;">за ${monthNameUk}</p>
       </div>
 
@@ -359,22 +375,23 @@ export async function downloadTimesheetPDF(
       <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px;">
         <thead>
           <tr style="background: #e9ecef;">
-            <th style="padding: 6px; border: 1px solid #ccc; width: 30px;">№</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Дата (день тижня)</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Відпрацьовано</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Тарифний коефіцієнт</th>
-            <th style="padding: 6px; border: 1px solid #ccc; text-align: right;">Нараховано</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Примітка / Вид робіт</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 25px;">№</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 90px;">Дата</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 60px;">Години</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 75px;">Тариф</th>
+            <th style="padding: 6px; border: 1px solid #ccc; text-align: right; width: 75px;">ЗП (грн)</th>
+            <th style="padding: 6px; border: 1px solid #ccc; text-align: right; width: 85px;">Авто (грн)</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Примітка / Поїздки авто</th>
           </tr>
         </thead>
         <tbody>
-          ${rowsHtml.length > 0 ? rowsHtml : `<tr><td colspan="6" style="padding: 12px; text-align: center;">Немає записів за цей місяць</td></tr>`}
+          ${rowsHtml.length > 0 ? rowsHtml : `<tr><td colspan="7" style="padding: 12px; text-align: center;">Немає записів за цей місяць</td></tr>`}
         </tbody>
       </table>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
         <div style="background: #f8f9fa; border: 1px solid #ddd; padding: 12px; border-radius: 6px;">
-          <h4 style="margin: 0 0 8px 0; font-size: 12px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">Підсумок відпрацьованого часу:</h4>
+          <h4 style="margin: 0 0 8px 0; font-size: 12px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">Підсумок за місяць:</h4>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
             <span>Будні дні:</span>
             <strong>${totalHoursWeekday} год (${totalWeekdayEarned.toFixed(2)} грн)</strong>
@@ -383,6 +400,10 @@ export async function downloadTimesheetPDF(
             <span>Вихідні/свята (×1.5):</span>
             <strong>${totalHoursWeekend} год (${totalWeekendEarned.toFixed(2)} грн)</strong>
           </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #b06000;">
+            <span>Компенсація за авто (${totalAutoKm.toFixed(1)} км):</span>
+            <strong>+${totalAutoCompensation.toFixed(2)} грн</strong>
+          </div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid #ccc; padding-top: 4px;">
             <span>Всього годин:</span>
             <strong>${totalHoursWeekday + totalHoursWeekend} год</strong>
@@ -390,9 +411,12 @@ export async function downloadTimesheetPDF(
         </div>
 
         <div style="background: #fff8f0; border: 1.5px solid #ff6b00; padding: 12px; border-radius: 6px; text-align: right;">
-          <span style="font-size: 12px; color: #555;">Загальна сума до виплати за місяць:</span>
+          <span style="font-size: 12px; color: #555;">Загальна сума до виплати за місяць (ЗП + Авто):</span>
           <div style="font-size: 22px; font-weight: bold; color: #ff6b00; margin-top: 4px;">
-            ${totalSalary.toFixed(2)} грн
+            ${grandTotalPayout.toFixed(2)} грн
+          </div>
+          <div style="font-size: 11px; color: #777; margin-top: 2px;">
+            Основна ЗП: ${totalSalaryEarned.toFixed(2)} грн • Авто: ${totalAutoCompensation.toFixed(2)} грн
           </div>
         </div>
       </div>
@@ -554,65 +578,119 @@ export async function downloadEquipmentStatsPDF(equipmentList: EquipmentItem[]) 
   await generatePdfFromHtml(container, `Звіт_Техніка_${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
-// 5. Звіт по складу та руху матеріалів
+// 5. Звіт по складу та руху матеріалів (Відомість залишків ТМЦ)
 export async function downloadWarehouseReportPDF(warehouseList: WarehouseItem[]) {
   const container = document.createElement('div');
   container.className = 'pdf-render-box';
 
-  const rows = warehouseList.map((wh, idx) => {
+  // Sort items alphabetically by Category first, then Name, then Brand/Specs
+  const sortedList = [...warehouseList].sort((a, b) => {
+    const catComp = a.category.localeCompare(b.category, 'uk');
+    if (catComp !== 0) return catComp;
+    const nameComp = a.name.localeCompare(b.name, 'uk');
+    if (nameComp !== 0) return nameComp;
+    return (a.brand || '').localeCompare(b.brand || '', 'uk');
+  });
+
+  let totalItemsCount = sortedList.length;
+  let deficitItemsCount = 0;
+  let totalWarehouseValuation = 0;
+
+  const rows = sortedList.map((wh, idx) => {
     let statusText = 'В нормі';
-    let statusBg = 'background: #e6f4ea; color: #137333;';
+    let statusBg = 'background: #e6f4ea; color: #137333; font-weight: bold;';
     if (wh.currentStock === 0) {
       statusText = 'Критично (0)';
       statusBg = 'background: #fce8e6; color: #c5221f; font-weight: bold;';
+      deficitItemsCount++;
     } else if (wh.currentStock <= wh.minStockThreshold) {
       statusText = 'Низький залишок';
       statusBg = 'background: #fef7e0; color: #b06000; font-weight: bold;';
+      deficitItemsCount++;
     }
 
     const val = (wh.purchasePrice || 0) * wh.currentStock;
+    totalWarehouseValuation += val;
 
-    const specsStr = [wh.brand, wh.specs, wh.purpose].filter(Boolean).join(' | ');
+    const brandStr = wh.brand || '—';
+    const specsStr = [wh.specs, wh.purpose].filter(Boolean).join(' | ') || '—';
+    const assignedStr = wh.assignedEquipmentName ? `⚙️ ${wh.assignedEquipmentName}` : 'Загальний склад';
 
     return `
       <tr>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${idx + 1}</td>
         <td style="padding: 6px; border: 1px solid #ccc;">
-          <strong>${wh.name}</strong><br/>
-          <span style="font-size: 10px; color: #555;">${specsStr || wh.category}</span>
+          <strong>${wh.name}</strong>
         </td>
-        <td style="padding: 6px; border: 1px solid #ccc;">${wh.category}</td>
-        <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${wh.currentStock} ${wh.unit}</td>
-        <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${wh.minStockThreshold} ${wh.unit}</td>
-        <td style="padding: 6px; border: 1px solid #ccc; text-align: center; ${statusBg}">${statusText}</td>
-        <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">${val.toFixed(2)} грн</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">${wh.category}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${brandStr}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">${specsStr}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">${assignedStr}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-weight: bold;">${wh.currentStock} ${wh.unit}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: center; color: #666;">${wh.minStockThreshold} ${wh.unit}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-size: 10px; ${statusBg}">${statusText}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">${wh.purchasePrice ? wh.purchasePrice.toFixed(2) + ' грн' : '—'}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">${val ? val.toFixed(2) + ' грн' : '0.00 грн'}</td>
       </tr>
     `;
   }).join('');
 
   container.innerHTML = `
-    <div style="font-family: Arial, sans-serif; font-size: 12px; color: #111; line-height: 1.4;">
-      <div style="border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 16px;">
-        <h2 style="margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase;">ЗВІТ ПРО СТАН ТА ЗАЛИШКИ СКЛАДУ</h2>
-        <p style="margin: 4px 0 0 0; color: #555;">Сформовано: ${new Date().toLocaleDateString('uk-UA')}</p>
+    <div style="font-family: Arial, sans-serif; font-size: 11px; color: #111; line-height: 1.4;">
+      <div style="border-bottom: 2px solid #222; padding-bottom: 8px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #555; font-weight: bold;">ШВЕЙНЕ ВИРОБНИЦТВО • БУХГАЛТЕРСЬКИЙ ОБЛІК</div>
+          <h2 style="margin: 4px 0 0 0; font-size: 16px; font-weight: bold; text-transform: uppercase; color: #111;">ВІДОМІСТЬ ЗАЛИШКІВ ТА ОЦІНКИ ТОВАРНО-МАТЕРІАЛЬНИХ ЦІННОСТЕЙ (ТМЦ)</h2>
+        </div>
+        <div style="text-align: right; font-size: 10px; color: #444;">
+          Дата звіту: <strong>${new Date().toLocaleDateString('uk-UA')}</strong><br/>
+          Час створення: <strong>${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}</strong>
+        </div>
       </div>
 
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 16px;">
         <thead>
-          <tr style="background: #e9ecef;">
-            <th style="padding: 6px; border: 1px solid #ccc; width: 30px;">№</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Найменування та Специфікація</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Категорія</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Поточний залишок</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Мін. поріг</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Статус</th>
-            <th style="padding: 6px; border: 1px solid #ccc; text-align: right;">Оціночна вартість</th>
+          <tr style="background: #2b303a; color: #ffffff;">
+            <th style="padding: 6px; border: 1px solid #2b303a; width: 25px;">№</th>
+            <th style="padding: 6px; border: 1px solid #2b303a;">Найменування ТМЦ</th>
+            <th style="padding: 6px; border: 1px solid #2b303a;">Категорія</th>
+            <th style="padding: 6px; border: 1px solid #2b303a;">Фірма / Виробник</th>
+            <th style="padding: 6px; border: 1px solid #2b303a;">ТТХ / Специфікація / Калібр</th>
+            <th style="padding: 6px; border: 1px solid #2b303a;">Закріплена техніка</th>
+            <th style="padding: 6px; border: 1px solid #2b303a; width: 65px; text-align: center;">Залишок</th>
+            <th style="padding: 6px; border: 1px solid #2b303a; width: 50px; text-align: center;">Поріг</th>
+            <th style="padding: 6px; border: 1px solid #2b303a; width: 75px; text-align: center;">Статус</th>
+            <th style="padding: 6px; border: 1px solid #2b303a; width: 60px; text-align: right;">Ціна (од)</th>
+            <th style="padding: 6px; border: 1px solid #2b303a; width: 75px; text-align: right;">Сума</th>
           </tr>
         </thead>
         <tbody>
           ${rows}
         </tbody>
       </table>
+
+      {/* Підсумковий блок */}
+      <div style="background: #f1f3f5; border: 1px solid #ccc; padding: 10px 14px; border-radius: 6px; margin-bottom: 24px; font-size: 11px; display: flex; justify-content: space-between;">
+        <div>Всього позицій на обліку: <strong>${totalItemsCount}</strong></div>
+        <div>Позицій у дефіциті / під замовлення: <strong style="color: #c5221f;">${deficitItemsCount}</strong></div>
+        <div>Загальна оціночна вартість залишків: <strong style="color: #137333; font-size: 12px;">${totalWarehouseValuation.toFixed(2)} грн</strong></div>
+      </div>
+
+      {/* Офіційні підписи для бухгалтерії */}
+      <div style="margin-top: 30px; border-top: 1px dashed #999; padding-top: 14px;">
+        <div style="font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 12px; color: #444;">Підписи відповідальних осіб за збереження та облік ТМЦ:</div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #222;">
+          <div>
+            Завідувач складом: _______________________ / Беніто Є. В. /
+          </div>
+          <div>
+            Головний механік: _______________________ / ____________ /
+          </div>
+          <div>
+            Головний бухгалтер: _______________________ / ____________ /
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -628,7 +706,6 @@ export async function downloadReceiptsReportPDF(
   const container = document.createElement('div');
   container.className = 'pdf-render-box';
 
-  // Extract all receipt movements
   const receipts: Array<{
     date: string;
     itemName: string;
@@ -663,7 +740,7 @@ export async function downloadReceiptsReportPDF(
           quantity: Math.abs(mov.quantity),
           price: wh.purchasePrice || 0,
           totalVal: Math.abs(mov.quantity) * (wh.purchasePrice || 0),
-          note: mov.note || 'Прихід на склад',
+          note: mov.note || 'Оприходування матеріалів',
           supplier: wh.supplier,
         });
       }
@@ -680,24 +757,24 @@ export async function downloadReceiptsReportPDF(
     grandQty += r.quantity;
     grandTotalVal += r.totalVal;
 
-    const specsDetails = [r.brand, r.specs, r.purpose].filter(Boolean).join(' | ');
+    const brandStr = r.brand || '—';
+    const specsDetails = [r.specs, r.purpose].filter(Boolean).join(' | ') || '—';
 
     return `
       <tr>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${idx + 1}</td>
         <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold; font-family: monospace; text-align: center;">${r.date}</td>
         <td style="padding: 6px; border: 1px solid #ccc;">
-          <strong>${r.itemName}</strong><br/>
-          <span style="font-size: 10px; color: #555;">Категорія: ${r.category}</span>
+          <strong>${r.itemName}</strong>
         </td>
-        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">
-          ${specsDetails || '—'}
-        </td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">${r.category}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${brandStr}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">${specsDetails}</td>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center; color: #137333; font-weight: bold;">
           +${r.quantity} ${r.unit}
         </td>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">${r.price ? r.price.toFixed(2) + ' грн' : '—'}</td>
-        <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">${r.totalVal ? r.totalVal.toFixed(2) + ' грн' : '—'}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">${r.totalVal ? r.totalVal.toFixed(2) + ' грн' : '0.00 грн'}</td>
         <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">
           ${r.supplier ? `<b>Постачальник:</b> ${r.supplier}<br/>` : ''}
           ${r.note}
@@ -711,39 +788,47 @@ export async function downloadReceiptsReportPDF(
     : 'За весь період обліку';
 
   container.innerHTML = `
-    <div style="font-family: Arial, sans-serif; font-size: 12px; color: #111; line-height: 1.4;">
-      <div style="border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end;">
+    <div style="font-family: Arial, sans-serif; font-size: 11px; color: #111; line-height: 1.4;">
+      <div style="border-bottom: 2px solid #137333; padding-bottom: 8px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end;">
         <div>
-          <h2 style="margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase; color: #137333;">ЗВІТ ПРИХОДІВ МАТЕРІАЛІВ ТА ГОЛОК НА СКЛАД</h2>
-          <p style="margin: 4px 0 0 0; color: #555; font-size: 11px;">Швейне виробництво • ${periodSubtitle}</p>
+          <div style="font-size: 10px; text-transform: uppercase; color: #137333; font-weight: bold;">ШВЕЙНЕ ВИРОБНИЦТВО • РЕЄСТР ПРИХОДУ ТМЦ</div>
+          <h2 style="margin: 2px 0 0 0; font-size: 16px; font-weight: bold; text-transform: uppercase; color: #137333;">ЗВІТ ПРИХОДІВ МАТЕРІАЛІВ ТА ГОЛОК НА СКЛАД</h2>
+          <p style="margin: 2px 0 0 0; color: #555; font-size: 10px;">${periodSubtitle}</p>
         </div>
-        <div style="text-align: right; font-size: 11px; color: #666;">
+        <div style="text-align: right; font-size: 10px; color: #666;">
           Сформовано: <strong>${new Date().toLocaleDateString('uk-UA')}</strong>
         </div>
       </div>
 
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 16px;">
         <thead>
           <tr style="background: #e6f4ea; color: #137333;">
-            <th style="padding: 6px; border: 1px solid #ccc; width: 30px;">№</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 85px; text-align: center;">Дата приходу</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 25px;">№</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 75px; text-align: center;">Дата приходу</th>
             <th style="padding: 6px; border: 1px solid #ccc;">Найменування</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Специфікація / Бренд / ТТХ</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 80px; text-align: center;">К-сть приходу</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 70px; text-align: right;">Ціна за од.</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 80px; text-align: right;">Сума</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Постачальник / Примітка</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Категорія</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Фірма / Виробник</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">ТТХ / Специфікація / Калібр</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 75px; text-align: center;">К-сть приходу</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 60px; text-align: right;">Ціна (од)</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 70px; text-align: right;">Сума</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Постачальник / Накладна</th>
           </tr>
         </thead>
         <tbody>
-          ${rows.length > 0 ? rows : `<tr><td colspan="8" style="padding: 12px; text-align: center; color: #777;">Зафіксованих приходів за обраний період не знайдено</td></tr>`}
+          ${rows.length > 0 ? rows : `<tr><td colspan="10" style="padding: 12px; text-align: center; color: #777;">Зафіксованих приходів за обраний період не знайдено</td></tr>`}
         </tbody>
       </table>
 
-      <div style="background: #f8f9fa; border: 1px solid #ddd; padding: 12px; border-radius: 8px; font-size: 12px; display: flex; justify-content: space-between;">
-        <div>Загальна кількість зафіксованих операцій приходу: <strong>${receipts.length}</strong></div>
-        <div>Всього зараховано одиниць: <strong style="color: #137333;">${grandQty}</strong></div>
-        <div>Загальна сума закупівлі: <strong style="color: #137333;">${grandTotalVal.toFixed(2)} грн</strong></div>
+      <div style="background: #f8f9fa; border: 1px solid #ddd; padding: 10px 14px; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between;">
+        <div>Загальна кількість операцій: <strong>${receipts.length}</strong></div>
+        <div>Всього оприбутковано: <strong style="color: #137333;">${grandQty} одиниць</strong></div>
+        <div>Загальна сума закупівель: <strong style="color: #137333; font-size: 12px;">${grandTotalVal.toFixed(2)} грн</strong></div>
+      </div>
+
+      <div style="margin-top: 24px; border-top: 1px dashed #aaa; padding-top: 12px; display: flex; justify-content: space-between; font-size: 10px;">
+        <div>Матеріально відповідальна особа (Прийняв): _________________ / Беніто Є. В. /</div>
+        <div>Перевірив бухгалтер: _________________ / ____________ /</div>
       </div>
     </div>
   `;
@@ -751,7 +836,7 @@ export async function downloadReceiptsReportPDF(
   await generatePdfFromHtml(container, `Звіт_Приходів_Складу_${dateFrom || 'all'}_${dateTo || 'today'}.pdf`);
 }
 
-// 7. Звіт про видачі та витрати зі складу
+// 7. Звіт про видачі та витрати зі складу (Акт списання)
 export async function downloadIssuancesReportPDF(
   warehouseList: WarehouseItem[],
   dateFrom?: string,
@@ -769,6 +854,9 @@ export async function downloadIssuancesReportPDF(
     purpose?: string;
     unit: string;
     quantity: number;
+    price: number;
+    totalVal: number;
+    reasonForDeduction?: string;
     note: string;
     equipmentName?: string;
     division?: string;
@@ -782,6 +870,9 @@ export async function downloadIssuancesReportPDF(
         if (dateFrom && movDate < dateFrom) return;
         if (dateTo && movDate > dateTo) return;
 
+        const qty = Math.abs(mov.quantity);
+        const price = wh.purchasePrice || 0;
+
         issuances.push({
           date: movDate,
           itemName: wh.name,
@@ -790,7 +881,10 @@ export async function downloadIssuancesReportPDF(
           specs: wh.specs,
           purpose: wh.purpose,
           unit: wh.unit,
-          quantity: Math.abs(mov.quantity),
+          quantity: qty,
+          price: price,
+          totalVal: qty * price,
+          reasonForDeduction: mov.reasonForDeduction || 'Знос / Видача на виробництво',
           note: mov.note || 'Видача зі складу',
           equipmentName: mov.equipmentName,
           division: mov.division,
@@ -803,9 +897,11 @@ export async function downloadIssuancesReportPDF(
   issuances.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   let totalIssuedUnits = 0;
+  let totalIssuedValuation = 0;
 
   const rows = issuances.map((iss, idx) => {
     totalIssuedUnits += iss.quantity;
+    totalIssuedValuation += iss.totalVal;
 
     let destination = 'Загальне списання';
     if (iss.equipmentName) {
@@ -814,28 +910,27 @@ export async function downloadIssuancesReportPDF(
       destination = `🏢 ${iss.division}`;
     }
 
-    const specsDetails = [iss.brand, iss.specs, iss.purpose].filter(Boolean).join(' | ');
+    const brandStr = iss.brand || '—';
+    const specsDetails = [iss.specs, iss.purpose].filter(Boolean).join(' | ') || '—';
 
     return `
       <tr>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${idx + 1}</td>
         <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold; font-family: monospace; text-align: center;">${iss.date}</td>
         <td style="padding: 6px; border: 1px solid #ccc;">
-          <strong>${iss.itemName}</strong><br/>
-          <span style="font-size: 10px; color: #555;">Категорія: ${iss.category}</span>
+          <strong>${iss.itemName}</strong>
         </td>
-        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">
-          ${specsDetails || '—'}
-        </td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">${iss.category}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${brandStr}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">${specsDetails}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;"><strong>${destination}</strong></td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px; color: #b06000; font-weight: bold;">${iss.reasonForDeduction}</td>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center; color: #c5221f; font-weight: bold;">
           -${iss.quantity} ${iss.unit}
         </td>
-        <td style="padding: 6px; border: 1px solid #ccc;">
-          <strong>${destination}</strong>
-        </td>
-        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">
-          ${iss.note}
-        </td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: right;">${iss.price ? iss.price.toFixed(2) + ' грн' : '—'}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: right; font-weight: bold;">${iss.totalVal ? iss.totalVal.toFixed(2) + ' грн' : '0.00 грн'}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">${iss.note}</td>
       </tr>
     `;
   }).join('');
@@ -845,37 +940,50 @@ export async function downloadIssuancesReportPDF(
     : 'За весь період обліку';
 
   container.innerHTML = `
-    <div style="font-family: Arial, sans-serif; font-size: 12px; color: #111; line-height: 1.4;">
-      <div style="border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end;">
+    <div style="font-family: Arial, sans-serif; font-size: 11px; color: #111; line-height: 1.4;">
+      <div style="border-bottom: 2px solid #c5221f; padding-bottom: 8px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end;">
         <div>
-          <h2 style="margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase; color: #c5221f;">ЗВІТ ПРО ВИДАЧУ ТА ВИТРАТИ МАТЕРІАЛІВ</h2>
-          <p style="margin: 4px 0 0 0; color: #555; font-size: 11px;">Швейне виробництво • ${periodSubtitle}</p>
+          <div style="font-size: 10px; text-transform: uppercase; color: #c5221f; font-weight: bold;">ШВЕЙНЕ ВИРОБНИЦТВО • БУХГАЛТЕРСЬКИЙ АКТ СПИСАННЯ</div>
+          <h2 style="margin: 2px 0 0 0; font-size: 16px; font-weight: bold; text-transform: uppercase; color: #c5221f;">ОФІЦІЙНИЙ ЗВІТ / АКТ СПИСАННЯ МАТЕРІАЛІВ І ЗАПЧАСТИН</h2>
+          <p style="margin: 2px 0 0 0; color: #555; font-size: 10px;">${periodSubtitle}</p>
         </div>
-        <div style="text-align: right; font-size: 11px; color: #666;">
+        <div style="text-align: right; font-size: 10px; color: #666;">
           Сформовано: <strong>${new Date().toLocaleDateString('uk-UA')}</strong>
         </div>
       </div>
 
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 16px;">
         <thead>
           <tr style="background: #fce8e6; color: #c5221f;">
-            <th style="padding: 6px; border: 1px solid #ccc; width: 30px;">№</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 85px; text-align: center;">Дата видачі</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 25px;">№</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 75px; text-align: center;">Дата</th>
             <th style="padding: 6px; border: 1px solid #ccc;">Найменування</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Специфікація / Бренд / ТТХ</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 80px; text-align: center;">К-сть видачі</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Кому видано (Машинка / Цех)</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Категорія</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Фірма / Виробник</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">ТТХ / Специфікація</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Куди видано</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Причина списання</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 65px; text-align: center;">К-сть</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 55px; text-align: right;">Ціна (од)</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 65px; text-align: right;">Сума</th>
             <th style="padding: 6px; border: 1px solid #ccc;">Примітка</th>
           </tr>
         </thead>
         <tbody>
-          ${rows.length > 0 ? rows : `<tr><td colspan="7" style="padding: 12px; text-align: center; color: #777;">Видач зі складу за обраний період не зафіксовано</td></tr>`}
+          ${rows.length > 0 ? rows : `<tr><td colspan="12" style="padding: 12px; text-align: center; color: #777;">Видач зі складу за обраний період не зафіксовано</td></tr>`}
         </tbody>
       </table>
 
-      <div style="background: #f8f9fa; border: 1px solid #ddd; padding: 12px; border-radius: 8px; font-size: 12px; display: flex; justify-content: space-between;">
-        <div>Всього зафіксовано видач: <strong>${issuances.length}</strong></div>
-        <div>Всього видано матеріалів: <strong style="color: #c5221f;">${totalIssuedUnits} одиниць</strong></div>
+      <div style="background: #f8f9fa; border: 1px solid #ddd; padding: 10px 14px; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between;">
+        <div>Всього операцій списання: <strong>${issuances.length}</strong></div>
+        <div>Всього списано: <strong style="color: #c5221f;">${totalIssuedUnits} одиниць</strong></div>
+        <div>Загальна вартість списаних ТМЦ: <strong style="color: #c5221f; font-size: 12px;">${totalIssuedValuation.toFixed(2)} грн</strong></div>
+      </div>
+
+      <div style="margin-top: 24px; border-top: 1px dashed #aaa; padding-top: 12px; display: flex; justify-content: space-between; font-size: 10px;">
+        <div>Списав (Зав. складом): _________________ / Беніто Є. В. /</div>
+        <div>Отримав (Бригадир / Механік): _________________ / ____________ /</div>
+        <div>Затвердив (Гол. бухгалтер): _________________ / ____________ /</div>
       </div>
     </div>
   `;
@@ -902,6 +1010,7 @@ export async function downloadFullMovementsReportPDF(
     unit: string;
     type: string;
     quantity: number;
+    reasonForDeduction?: string;
     note: string;
     equipmentName?: string;
     division?: string;
@@ -923,6 +1032,7 @@ export async function downloadFullMovementsReportPDF(
         unit: wh.unit,
         type: mov.type,
         quantity: mov.quantity,
+        reasonForDeduction: mov.reasonForDeduction,
         note: mov.note || '',
         equipmentName: mov.equipmentName,
         division: mov.division,
@@ -939,30 +1049,33 @@ export async function downloadFullMovementsReportPDF(
     const qtyColor = isPlus ? 'color: #137333; font-weight: bold;' : 'color: #c5221f; font-weight: bold;';
 
     let targetInfo = mov.note;
+    if (mov.reasonForDeduction) {
+      targetInfo = `[Причина: ${mov.reasonForDeduction}] ` + targetInfo;
+    }
     if (mov.equipmentName) {
-      targetInfo += ` [На машинку: ${mov.equipmentName}]`;
+      targetInfo += ` (На машинку: ${mov.equipmentName})`;
     } else if (mov.division) {
-      targetInfo += ` [Цех: ${mov.division}]`;
+      targetInfo += ` (Цех: ${mov.division})`;
     }
 
-    const specsDetails = [mov.brand, mov.specs, mov.purpose].filter(Boolean).join(' | ');
+    const brandStr = mov.brand || '—';
+    const specsDetails = [mov.specs, mov.purpose].filter(Boolean).join(' | ') || '—';
 
     return `
       <tr>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${idx + 1}</td>
         <td style="padding: 6px; border: 1px solid #ccc; font-family: monospace; text-align: center;">${mov.date}</td>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">
-          ${isPlus ? '<span style="color: #137333; font-weight: bold;">Прихід</span>' : '<span style="color: #c5221f; font-weight: bold;">Видача</span>'}
+          ${isPlus ? '<span style="color: #137333; font-weight: bold;">Прихід</span>' : '<span style="color: #c5221f; font-weight: bold;">Списання</span>'}
         </td>
         <td style="padding: 6px; border: 1px solid #ccc;">
-          <strong>${mov.itemName}</strong><br/>
-          <span style="font-size: 10px; color: #555;">Категорія: ${mov.category}</span>
+          <strong>${mov.itemName}</strong>
         </td>
-        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">
-          ${specsDetails || '—'}
-        </td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">${mov.category}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${brandStr}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">${specsDetails}</td>
         <td style="padding: 6px; border: 1px solid #ccc; text-align: center; ${qtyColor}">${qtyText} ${mov.unit}</td>
-        <td style="padding: 6px; border: 1px solid #ccc;">${targetInfo}</td>
+        <td style="padding: 6px; border: 1px solid #ccc; font-size: 10px;">${targetInfo}</td>
       </tr>
     `;
   }).join('');
@@ -972,28 +1085,36 @@ export async function downloadFullMovementsReportPDF(
     : 'За весь період обліку';
 
   container.innerHTML = `
-    <div style="font-family: Arial, sans-serif; font-size: 12px; color: #111; line-height: 1.4;">
-      <div style="border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 16px;">
-        <h2 style="margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase;">ЖУРНАЛ РУХУ СКЛАДСЬКИХ ЗАЛИШКІВ</h2>
-        <p style="margin: 4px 0 0 0; color: #555;">Повний хронологічний реєстр приходів та видач | ${periodSubtitle}</p>
+    <div style="font-family: Arial, sans-serif; font-size: 11px; color: #111; line-height: 1.4;">
+      <div style="border-bottom: 2px solid #222; padding-bottom: 8px; margin-bottom: 14px;">
+        <div style="font-size: 10px; text-transform: uppercase; color: #555; font-weight: bold;">ШВЕЙНЕ ВИРОБНИЦТВО • ПОВНИЙ РЕЄСТР ОПЕРАЦІЙ</div>
+        <h2 style="margin: 2px 0 0 0; font-size: 16px; font-weight: bold; text-transform: uppercase;">ЖУРНАЛ РУХУ СКЛАДСЬКИХ ЗАЛИШКІВ (ТМЦ)</h2>
+        <p style="margin: 2px 0 0 0; color: #555; font-size: 10px;">${periodSubtitle}</p>
       </div>
 
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 16px;">
         <thead>
           <tr style="background: #e9ecef;">
-            <th style="padding: 6px; border: 1px solid #ccc; width: 30px;">№</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 85px; text-align: center;">Дата</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 65px; text-align: center;">Тип</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 25px;">№</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 75px; text-align: center;">Дата</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 60px; text-align: center;">Тип</th>
             <th style="padding: 6px; border: 1px solid #ccc;">Найменування</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Специфікація / Бренд / ТТХ</th>
-            <th style="padding: 6px; border: 1px solid #ccc; width: 80px; text-align: center;">Обсяг руху</th>
-            <th style="padding: 6px; border: 1px solid #ccc;">Деталі / Призначення</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Категорія</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Фірма / Виробник</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">ТТХ / Специфікація</th>
+            <th style="padding: 6px; border: 1px solid #ccc; width: 70px; text-align: center;">Обсяг руху</th>
+            <th style="padding: 6px; border: 1px solid #ccc;">Деталі / Причина / Підстава</th>
           </tr>
         </thead>
         <tbody>
-          ${rows.length > 0 ? rows : `<tr><td colspan="7" style="padding: 12px; text-align: center; color: #777;">Записів за вказаний період не знайдено</td></tr>`}
+          ${rows.length > 0 ? rows : `<tr><td colspan="9" style="padding: 12px; text-align: center; color: #777;">Записів за вказаний період не знайдено</td></tr>`}
         </tbody>
       </table>
+
+      <div style="margin-top: 24px; border-top: 1px dashed #aaa; padding-top: 12px; display: flex; justify-content: space-between; font-size: 10px;">
+        <div>Відповідальний за ведення журналу: _________________ / Беніто Є. В. /</div>
+        <div>Перевірив: _________________ / ____________ /</div>
+      </div>
     </div>
   `;
 

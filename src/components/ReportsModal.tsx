@@ -39,6 +39,37 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
   const [dateFrom, setDateFrom] = React.useState('2026-07-01');
   const [dateTo, setDateTo] = React.useState(new Date().toISOString().split('T')[0]);
 
+  const setPreset = (preset: 'today' | 'week' | 'currentMonth' | 'prevMonth' | 'allTime') => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (preset === 'today') {
+      setDateFrom(todayStr);
+      setDateTo(todayStr);
+    } else if (preset === 'week') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      setDateFrom(d.toISOString().split('T')[0]);
+      setDateTo(todayStr);
+    } else if (preset === 'currentMonth') {
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      setDateFrom(`${year}-${month}-01`);
+      setDateTo(todayStr);
+    } else if (preset === 'prevMonth') {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 1);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(year, d.getMonth() + 1, 0).getDate();
+      setDateFrom(`${year}-${month}-01`);
+      setDateTo(`${year}-${month}-${String(lastDay).padStart(2, '0')}`);
+    } else if (preset === 'allTime') {
+      setDateFrom('2020-01-01');
+      setDateTo(todayStr);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto">
       <div className="glass-card max-w-lg w-full p-6 relative border-white/20 my-auto">
@@ -58,11 +89,52 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
         </p>
 
         {/* Date Filter Block for Movement Reports */}
-        <div className="p-3 rounded-2xl bg-white/5 border border-white/10 mb-4 space-y-1.5">
-          <label className="block text-[11px] text-[#ff6b00] font-bold uppercase tracking-wider">
-            📅 Період формування звітів руху (з — по):
-          </label>
-          <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="p-3 rounded-2xl bg-white/5 border border-white/10 mb-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="block text-[11px] text-[#ff6b00] font-bold uppercase tracking-wider">
+              📅 Період формування звітів (з — по):
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setPreset('today')}
+              className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-[#ff6b00]/30 text-[10px] text-white font-medium border border-white/10 transition-colors"
+            >
+              Сьогодні
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('week')}
+              className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-[#ff6b00]/30 text-[10px] text-white font-medium border border-white/10 transition-colors"
+            >
+              Тиждень
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('currentMonth')}
+              className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-[#ff6b00]/30 text-[10px] text-white font-medium border border-white/10 transition-colors"
+            >
+              Поточний місяць
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('prevMonth')}
+              className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-[#ff6b00]/30 text-[10px] text-white font-medium border border-white/10 transition-colors"
+            >
+              Минулий місяць
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('allTime')}
+              className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-[#ff6b00]/30 text-[10px] text-white font-medium border border-white/10 transition-colors"
+            >
+              Весь час
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs pt-1">
             <div>
               <span className="text-[10px] text-[#aaaaaa] block mb-0.5">Дата з:</span>
               <input

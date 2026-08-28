@@ -75,6 +75,7 @@ export interface StockMovement {
   type: 'receipt' | 'expense' | 'repair_deduction' | 'inventory_adjustment';
   quantity: number;
   note: string;
+  reasonForDeduction?: string; // Причина списання для бухгалтерії (знос, поломка, планова заміна тощо)
   repairId?: string;
   division?: string;
   equipmentId?: string;
@@ -95,6 +96,8 @@ export interface WarehouseItem {
   supplier?: string;
   purchasePrice?: number;
   arrivalDate?: string; // дата оприходування
+  assignedEquipmentId?: string; // ID закріпленого обладнання
+  assignedEquipmentName?: string; // Назва закріпленого обладнання
   movements: StockMovement[];
 }
 
@@ -124,17 +127,41 @@ export interface SalarySettings {
   position: string; // e.g. Головний інженер / Майстер
 }
 
+export interface AutoCompensationSettings {
+  carValue: number; // V — Вартість авто, грн (e.g. 350000)
+  resourceKm: number; // R — Ресурс до капремонту, км (e.g. 250000)
+  fuelConsumptionNorm: number; // N — Паспортна норма витрати, л/100 км (e.g. 9.0)
+  kCold: number; // K_cold — Коефіцієнт холодного пуску (e.g. 1.5)
+  sColdLimit: number; // S_cold — Ліміт дистанції прогріву, км (e.g. 3.0)
+  petrolPrice: number; // P_benz — Ціна бензину, грн/л (e.g. 55.0)
+  regularFuelPrice: number; // P_norm — Ціна штатного пального, грн/л (e.g. 30.0)
+  kRisk: number; // K_risk — Коефіцієнт ризику/суміщення (e.g. 1.5)
+  sStartEquivalent: number; // S_start — Еквівалент зносу холодного пуску, км (e.g. 10.0)
+}
+
+export interface AutoTripLog {
+  distanceKm: number; // S_total
+  durationMinutes: number; // T
+  cTime: number; // Вартість робочого часу (надбавка)
+  cFuel: number; // Пальне
+  cWear: number; // Амортизація
+  totalCompensation: number; // C_total
+  note?: string;
+}
+
 export interface WorkDayLog {
   date: string; // YYYY-MM-DD
   hours: number;
   isWeekend: boolean; // Sat/Sun or custom weekend
   note?: string;
+  autoTrip?: AutoTripLog;
 }
 
 export interface AppSettings {
   pinHash?: string;
   isPinSet: boolean;
   salarySettings: SalarySettings;
+  autoSettings?: AutoCompensationSettings;
   lastBackupDate?: string;
 }
 

@@ -34,6 +34,7 @@ import {
   InventoryAct,
   AppSettings,
   SalarySettings,
+  AutoCompensationSettings,
   RepairRecord
 } from './types';
 
@@ -240,6 +241,15 @@ export default function App() {
     await refreshData();
   };
 
+  const handleSaveAutoSettings = async (autoSettings: AutoCompensationSettings) => {
+    const updated: AppSettings = {
+      ...settings,
+      autoSettings,
+    };
+    await saveSettings(updated);
+    await refreshData();
+  };
+
   const handleSaveInventoryAct = async (act: InventoryAct) => {
     await saveInventoryAct(act);
     await refreshData();
@@ -359,8 +369,10 @@ export default function App() {
         {activeTab === 'accounting' && (
           <AccountingSection
             salarySettings={settings.salarySettings}
+            autoSettings={settings.autoSettings}
             workDayLogs={workDayLogs}
             onSaveSalarySettings={handleSaveSalarySettings}
+            onSaveAutoSettings={handleSaveAutoSettings}
             onSaveWorkDayLog={handleSaveWorkDayLog}
             onDeleteWorkDayLog={handleDeleteWorkDayLog}
             onDownloadTimesheetPDF={downloadTimesheetPDF}
